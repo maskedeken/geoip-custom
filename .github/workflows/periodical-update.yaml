@@ -47,8 +47,7 @@ jobs:
         awk 'FNR==1{print ""}{print}' dist/*.txt > dist/merge.txt
         awk '!seen[$0]++' dist/merge.txt > dist/CN-ip-cidr.txt
         sed -i '/^s*$/d' dist/CN-ip-cidr.txt
-        rm -f data/cn
-        ln -s dist/CN-ip-cidr.txt data/cn
+        cp dist/CN-ip-cidr.txt data/cn
 
     - name: Generate GeoIP2 database
       run: |
