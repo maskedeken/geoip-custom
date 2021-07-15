@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,8 @@ import (
 	"github.com/maxmind/mmdbwriter"
 	"github.com/maxmind/mmdbwriter/mmdbtype"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/EvilSuperstars/go-cidrman"
 )
 
 var (
@@ -43,8 +46,8 @@ func init() {
 	flag.Parse()
 }
 
-func load(path string) ([]string, error) {
-	var ipTxtList []string
+func load(path string) ([]*net.IPNet, error) {
+	var ipList []*net.IPNet
 
 	fh, err := os.Open(path)
 	if err != nil {
@@ -56,9 +59,16 @@ func load(path string) ([]string, error) {
 	scanner.Split(bufio.ScanLines)
 
 	for scanner.Scan() {
-		ipTxtList = append(ipTxtList, scanner.Text())
+		cidrTxt := scanner.Text()
+		_, network, err := net.ParseCIDR(scanner.Text())
+		if err != nil || network == nil {
+			log.Printf("%s fail to parse to CIDR", cidrTxt)
+			continue
+		}
+		ipList = append(ipList, network)
 	}
-	return ipTxtList, nil
+
+	return ipList, nil
 }
 
 func main() {
@@ -80,7 +90,7 @@ func main() {
 		}
 	}
 
-	ref := make(map[string][]string)
+	ref := make(map[string][]*net.IPNet)
 	err = filepath.Walk(dataPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -114,7 +124,13 @@ func main() {
 			},
 		}
 
-		for _, ip := range parseCIDRs(list) {
+		list, err = cidrman.MergeIPNets(list)
+		if err != nil {
+			log.Printf("fail to merge CIDRs: %s", err)
+			continue
+		}
+
+		for _, ip := range list {
 			err = writer.Insert(ip, rec)
 			if err != nil {
 				log.Fatalf("fail to insert to writer: %v", err)
