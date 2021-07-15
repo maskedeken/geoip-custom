@@ -47,42 +47,22 @@ jobs:
         awk 'FNR==1{print ""}{print}' dist/*.txt > dist/merge.txt
         awk '!seen[$0]++' dist/merge.txt > dist/CN-ip-cidr.txt
         sed -i '/^s*$/d' dist/CN-ip-cidr.txt
+        rm -f data/cn
+        ln -s dist/CN-ip-cidr.txt data/cn
 
     - name: Generate GeoIP2 database
       run: |
-        CURRENT_DIR=$(pwd)
         cd dist
-        if [ -f ../reserved.txt ];then
-            ./ipip2mmdb -s ./CN-ip-cidr.txt -r ../reserved.txt -d Country.mmdb
-        else
-            ./ipip2mmdb -s ./CN-ip-cidr.txt -d Country.mmdb
-        fi
-        cd $CURRENT_DIR
+        ./ipip2mmdb -datapath=../data
 
     - name: Push artifacts to release branch
       run: |
-        git config --local user.email "10215166+Hackl0us@users.noreply.github.com"
-        git config --local user.name "github-action[bot]"
-
-        git fetch
-        git checkout release
-
-        git checkout --orphan release-orphan
-        git rm -rf .
-
-        cp -rf dist/CN-ip-cidr.txt ./
-        cp -rf dist/Country.mmdb ./
-
-        git add Country.mmdb
-        git add CN-ip-cidr.txt
+        cd dist
+        git init
+        git config --local user.name "actions"
+        git config --local user.email "action@github.com"
+        git checkout -b release
+        git add CN-ip-cidr.txt Country.mmdb
         git commit -am "Updated at $(date)"
-
-        git branch -D release
-        git branch -m release
-            
-    - name: GitHub Push
-      uses: ad-m/github-push-action@v0.6.0
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        branch: release
-        force: true
+        git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+        git push -f -u origin release
