@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,10 +17,11 @@ import (
 )
 
 var (
-	dataPath   string
-	outputName string
-	outputDir  string
-	cnRecord   = mmdbtype.Map{
+	dataPath    string
+	outputName  string
+	outputDir   string
+	exportLists string
+	cnRecord    = mmdbtype.Map{
 		"country": mmdbtype.Map{
 			"is_in_european_union": mmdbtype.Bool(false),
 			"iso_code":             mmdbtype.String("CN"),
@@ -43,6 +45,7 @@ func init() {
 	flag.StringVar(&dataPath, "datapath", "./data", "specify directory which contains ip list files")
 	flag.StringVar(&outputName, "outputname", "Country.mmdb", "specify destination mmdb file")
 	flag.StringVar(&outputDir, "outputdir", "./", "Directory to place all generated files")
+	flag.StringVar(&exportLists, "exportlists", "", "Lists to be flattened and exported in plaintext format, separated by ',' comma")
 	flag.Parse()
 }
 
@@ -72,6 +75,14 @@ func load(path string) ([]*net.IPNet, error) {
 }
 
 func main() {
+	// Flatten and export plaintext list
+	exportMap := make(map[string]interface{})
+	if exportLists != "" {
+		for _, name := range strings.Split(exportLists, ",") {
+			exportMap[name] = nil
+		}
+	}
+
 	writer, err := mmdbwriter.New(
 		mmdbwriter.Options{
 			DatabaseType:            "GeoIP2-Country",
@@ -136,6 +147,12 @@ func main() {
 				log.Fatalf("fail to insert to writer: %v", err)
 			}
 		}
+
+		listname := strings.ToLower(refName)
+		if _, ok := exportMap[listname]; ok {
+			exportPlainTextList(listname, list)
+		}
+
 	}
 
 	outFh, err := os.Create(filepath.Join(outputDir, outputName))
@@ -148,4 +165,16 @@ func main() {
 		log.Fatalf("fail to write to file: %v", err)
 	}
 
+}
+
+func exportPlainTextList(refName string, ipList []*net.IPNet) error {
+	var data []byte
+	for _, ip := range ipList {
+		data = append(data, []byte(ip.String()+"\n")...)
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(outputDir, refName+".txt"), data, 0644); err != nil {
+		return err
+	}
+	return nil
 }
