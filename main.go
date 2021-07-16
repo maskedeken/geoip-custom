@@ -14,36 +14,21 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/EvilSuperstars/go-cidrman"
+
+	"v2ray.com/core/app/router"
+	"v2ray.com/core/infra/conf"
+
+	"google.golang.org/protobuf/proto"
 )
 
 var (
 	dataPath    string
-	outputName  string
 	outputDir   string
 	exportLists string
-	cnRecord    = mmdbtype.Map{
-		"country": mmdbtype.Map{
-			"is_in_european_union": mmdbtype.Bool(false),
-			"iso_code":             mmdbtype.String("CN"),
-			"names": mmdbtype.Map{
-				"en": mmdbtype.String("China"),
-			},
-		},
-	}
-	reservedRecord = mmdbtype.Map{
-		"country": mmdbtype.Map{
-			"is_in_european_union": mmdbtype.Bool(false),
-			"iso_code":             mmdbtype.String("RESERVED"),
-			"names": mmdbtype.Map{
-				"en": mmdbtype.String("Reserved"),
-			},
-		},
-	}
 )
 
 func init() {
 	flag.StringVar(&dataPath, "datapath", "./data", "specify directory which contains ip list files")
-	flag.StringVar(&outputName, "outputname", "Country.mmdb", "specify destination mmdb file")
 	flag.StringVar(&outputDir, "outputdir", "./", "Directory to place all generated files")
 	flag.StringVar(&exportLists, "exportlists", "", "Lists to be flattened and exported in plaintext format, separated by ',' comma")
 	flag.Parse()
@@ -124,6 +109,7 @@ func main() {
 		log.Fatalf("%v", err)
 	}
 
+	geoIPList := new(router.GeoIPList)
 	for refName, list := range ref {
 		rec := mmdbtype.Map{
 			"country": mmdbtype.Map{
@@ -141,21 +127,35 @@ func main() {
 			continue
 		}
 
+		cidrList := make([]*router.CIDR, 0)
 		for _, ip := range list {
 			err = writer.Insert(ip, rec)
 			if err != nil {
 				log.Fatalf("fail to insert to writer: %v", err)
 			}
+
+			var cidr *router.CIDR
+			cidr, err = conf.ParseIP(ip.String())
+			if err != nil {
+				log.Fatalf("fail to convert IP to CIDR: %v", err)
+				continue
+			}
+
+			cidrList = append(cidrList, cidr)
 		}
+
+		geoIPList.Entry = append(geoIPList.Entry, &router.GeoIP{
+			CountryCode: refName,
+			Cidr:        cidrList,
+		})
 
 		listname := strings.ToLower(refName)
 		if _, ok := exportMap[listname]; ok {
 			exportPlainTextList(listname, list)
 		}
-
 	}
 
-	outFh, err := os.Create(filepath.Join(outputDir, outputName))
+	outFh, err := os.Create(filepath.Join(outputDir, "Country.mmdb"))
 	if err != nil {
 		log.Fatalf("fail to create output file: %v", err)
 	}
@@ -165,6 +165,14 @@ func main() {
 		log.Fatalf("fail to write to file: %v", err)
 	}
 
+	geoIPBytes, err := proto.Marshal(geoIPList)
+	if err != nil {
+		log.Fatalf("Error marshalling geoip list: %v", err)
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(outputDir, "geoip.dat"), geoIPBytes, 0644); err != nil {
+		log.Fatalf("Error writing geoip to file:", err)
+	}
 }
 
 func exportPlainTextList(refName string, ipList []*net.IPNet) error {
