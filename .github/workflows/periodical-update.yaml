@@ -61,7 +61,7 @@ jobs:
         git config --local user.name "actions"
         git config --local user.email "action@github.com"
         git checkout -b release
-        git add *.txt Country.mmdb geoip.dat
+        git add cn.txt reserved.txt Country.mmdb geoip.dat
         git commit -am "Updated at $(date)"
         git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
         git push -f -u origin release
