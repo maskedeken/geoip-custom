@@ -52,7 +52,7 @@ jobs:
     - name: Generate GeoIP2 database
       run: |
         cd dist
-        ./ipip2mmdb -datapath=../data -exportlists=cn
+        ./ipip2mmdb -datapath=../data -exportlists=cn,reserved
 
     - name: Push artifacts to release branch
       run: |
